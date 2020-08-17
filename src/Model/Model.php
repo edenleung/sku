@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Sku\Model;
+namespace xiaodi\Sku\Model;
 
 use think\Model as BaseModel;
 

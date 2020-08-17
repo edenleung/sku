@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Sku\Model;
+namespace xiaodi\Sku\Model;
 
-use Sku\Model\Model;
+use xiaodi\Sku\Model\Model;
 
 class SkuAttr extends Model
 {

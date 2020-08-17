@@ -1,8 +1,8 @@
 <?php
 
-namespace Sku\Traits;
+namespace xiaodi\Sku\Traits;
 
-use Sku\Sku;
+use xiaodi\Sku\Sku;
 
 trait HasSku
 {
