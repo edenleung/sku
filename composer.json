@@ -1,0 +1,18 @@
+{
+    "name": "xiaodi/sku",
+    "description": "sku package for vant",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "xiaodi",
+            "email": "liangjinbiao@live.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "xiaodi\\Sku\\": "src"
+        }
+    }
+}
