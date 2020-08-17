@@ -21,13 +21,10 @@ class Sku
 
     protected $sku_a;
 
-    protected $sku_av;
-
-    public function __construct(Model $sku_g, Model $sku_a, Model $sku_av)
+    public function __construct(Model $sku_g, Model $sku_a)
     {
         $this->sku_g = $sku_g;
         $this->sku_a = $sku_a;
-        $this->sku_av = $sku_av;
     }
 
     public function goods($goods)
@@ -68,9 +65,9 @@ class Sku
     {
         return $this->sku_g->save([
             'goods_id' => $this->goods,
-            'stock' => $this->stock,
+            'stock_num' => $this->stock,
             'price' => $this->price,
-            'attr_value_ids' => $this->formatAttrValueIds()
+            'sku_attrs' => $this->formatAttrValueIds()
         ]);
     }
 
@@ -87,8 +84,8 @@ class Sku
 
         if ($row) {
             $this->price && $row->price = $this->price;
-            $this->stock && $row->stock = $this->stock;
-            $this->attrs && $row->attr_value_ids = $this->formatAttrValueIds();
+            $this->stock && $row->stock_num = $this->stock;
+            $this->attrs && $row->sku_attrs = $this->formatAttrValueIds();
             $row->save();
         } else {
             throw new Exception('sku not found');
@@ -135,23 +132,34 @@ class Sku
         return $skus;
     }
 
+    protected function getGoodsSkus()
+    {
+        return $this->sku_g->where('goods_id', $this->goods)->select();
+    }
+
+    protected function getTopSkuAttr()
+    {
+        return $this->sku_a->where('pid', 0)->buildSql();
+    }
+
     // 所有sku规格类目与其值的从属关系，比如商品有颜色和尺码两大类规格，颜色下面又有红色和蓝色两个规格值。
     // 可以理解为一个商品可以有多个规格类目，一个规格类目下可以有多个规格值。
     public function tree()
     {
         $tree = [];
-        $skus = $this->sku_g->where('goods_id', $this->goods)->select();
+        $skus = $this->getGoodsSkus();
 
+        $subQuery = $this->getTopSkuAttr();
         foreach ($skus as $sku) {
-            $attrvs = $sku->attr_value_ids;
-            $sku_avs = $this->sku_av->whereIn('id', $attrvs)->select();
-            foreach ($sku_avs as $sku_av) {
-                $attr = $this->sku_a->where('id', $sku_av->attr_id)->find();
-                $tree[$sku_av->attr_id]['k'] = $attr->name;
-                $tree[$sku_av->attr_id]['k_s'] = "s{$attr->id}";
-                $tree[$sku_av->attr_id]['v'][] = [
-                    'id' => $sku_av->id,
-                    'name' => $sku_av->name,
+            $sku_as = $this->sku_a->alias('a')->join([
+                $subQuery => 'b'
+            ], 'a.pid = b.id')->whereIn('a.id', $sku->sku_attrs)->field('a.*, b.name as parent_name, b.id  as parent_id')->select();
+            foreach ($sku_as as $sku_a) {
+                $tree[$sku_a->parent_id]['k'] = $sku_a->parent_name;
+                $tree[$sku_a->parent_id]['k_s'] = "s{$sku_a->parent_id}";
+                $tree[$sku_a->parent_id]['v'][] = [
+                    'id' => $sku_a->id,
+                    'name' => $sku_a->name,
                     'imgUrl' => '',
                     'previewImgUrl' => ''
                 ];
@@ -167,22 +175,22 @@ class Sku
     public function list()
     {
         $list = [];
-        $skus = $this->sku_g->where('goods_id', $this->goods)->select();
+        $skus = $this->getGoodsSkus();
+        $subQuery = $this->getTopSkuAttr();
 
         foreach ($skus as $sku) {
-
             $temp = [
                 "id" => $sku->id,
                 "price" => $sku->price,
-                "stock_num" => $sku->stock,
+                "stock_num" => $sku->stock_num,
             ];
 
-            $attrvs = $sku->attr_value_ids;
-            $sku_avs = $this->sku_av->whereIn('id', $attrvs)->select();
+            $sku_as = $this->sku_a->alias('a')->join([
+                $subQuery => 'b'
+            ], 'a.pid = b.id')->whereIn('a.id', $sku->sku_attrs)->field('a.*, b.name as parent_name, b.id  as parent_id')->select();
 
-            foreach ($sku_avs as $sku_av) {
-                $attr = $this->sku_a->where('id', $sku_av->attr_id)->find();
-                $temp["s{$attr->id}"] = $sku_av->id;
+            foreach ($sku_as as $sku_a) {
+                $temp["s{$sku_a->parent_id}"] = $sku_a->id;
             }
 
             $list[] = $temp;
@@ -195,7 +203,7 @@ class Sku
     {
         return [
             'tree' => $this->tree(),
-            'lisst' => $this->list()
+            'list' => $this->list()
         ];
     }
 }

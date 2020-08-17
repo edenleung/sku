@@ -6,9 +6,9 @@ namespace xiaodi\Sku\Model;
 
 use xiaodi\Sku\Model\Model;
 
-class GoodsSku extends Model
+class SkuGoods extends Model
 {
-    public function getAttrValueIdsAttr($value)
+    public function getSkuAttrsAttr($value)
     {
         if ($value) {
           return explode(',', $value);
