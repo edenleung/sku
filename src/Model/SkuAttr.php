@@ -8,4 +8,8 @@ use xiaodi\Sku\Model\Model;
 
 class SkuAttr extends Model
 {
+    public function formatTree()
+    {
+        
+    }
 }

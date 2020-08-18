@@ -11,9 +11,16 @@ class SkuGoods extends Model
     public function getSkuAttrsAttr($value)
     {
         if ($value) {
-          return explode(',', $value);
+            return explode(',', $value);
         }
 
         return [];
+    }
+
+    public function setSkuAttrsAttr($value)
+    {
+        if (!empty($value)) {
+            return implode(',', $value);
+        }
     }
 }
