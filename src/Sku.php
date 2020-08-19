@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace xiaodi\Sku;
 
 use Exception;
-use xiaodi\Sku\Model\Model;
+
+use xiaodi\Sku\Contract\SkuAttrContract;
+use xiaodi\Sku\Contract\SkuGoodsContract;
 
 class Sku
 {
@@ -21,7 +23,11 @@ class Sku
 
     protected $sku_a;
 
-    public function __construct(Model $sku_g, Model $sku_a)
+    protected $row;
+
+    protected $data = [];
+
+    public function __construct(SkuGoodsContract $sku_g, SkuAttrContract $sku_a)
     {
         $this->sku_g = $sku_g;
         $this->sku_a = $sku_a;
@@ -45,53 +51,68 @@ class Sku
 
     public function attr($attr)
     {
-        if (is_numeric($attr)) {
-            $this->attrs[] = $attr;
-        } else {
-            $this->attrs[] = $attr->id;
-        }
+        $this->attrs[] = $attr;
 
         return $this;
+    }
+
+    public function getAttr()
+    {
+        return $this->attrs;
     }
 
     public function price($value)
     {
         $this->price = $value * 100;
+
         return $this;
     }
 
     public function stock($value)
     {
         $this->stock = $value;
+
         return $this;
     }
 
     public function add(array $data = [])
     {
-        return $this->sku_g->save([
+        $this->data = [
             'goods_id' => $this->goods,
-            'stock_num' => $this->stock,
+            'sku_attrs' => $this->stock,
             'price' => $this->price,
-            'sku_attrs' => $this->attrs
-        ]);
+            'sku_attrs' => implode(',', $this->attrs)
+        ];
+
+        return $this->save();
     }
 
     protected function save()
     {
+        if ($this->attrs) {
+            $temp = [];
+            foreach ($this->attrs as $attr) {
+                $attr = $this->sku_a->get($attr);
+                $temp[] = $attr->id . ':' . $attr->pid;
+            }
+
+            $this->data['sku_attrs'] = implode(',', $temp);
+        }
+
+        $this->data['price'] = $this->data['price'] * 100;
+        return $this->row ? $this->sku_g->update($this->row, $this->data) : $this->sku_g->create($this->data);
     }
 
-    public function update(array $data = [])
+    public function update($id = null, array $data = [])
     {
-        $row = $this->sku_g->where([
-            'id' => $this->row,
-            'goods_id' => $this->goods
-        ])->find();
+        $id && $this->row = $id;
+        $row = $this->sku_g->get($this->row);
 
         if ($row) {
-            $this->price && $row->price = $this->price;
-            $this->stock && $row->stock_num = $this->stock;
-            $this->attrs && $row->sku_attrs = $this->attrs;
-            $row->save();
+            $this->price && $this->data['price'] = $this->price;
+            $this->stock && $this->data['stock_num'] = $this->stock;
+            $this->attrs && $this->data['sku_attrs'] = implode(',', $this->attrs);
+            return $this->save();
         } else {
             throw new Exception('sku not found');
         }
@@ -100,11 +121,8 @@ class Sku
     public function delete($value = null)
     {
         $value && $this->row = $value;
-        $row = $this->sku_g->where([
-            'id' => $this->row
-        ])->find();
 
-        return $row->delete();
+        return $this->sku_g->delete($this->row);
     }
 
     public function getRow()
@@ -115,32 +133,13 @@ class Sku
     public function row($value)
     {
         $this->row = $value;
+
         return $this;
-    }
-
-    public function get($goods = null)
-    {
-        $goods && $this->goods = $goods;
-        $skus = $this->sku_g->where('goods_id', $this->goods)->select();
-
-        return $skus;
     }
 
     public function getSku()
     {
-        return $this->sku_g->where('goods_id', $this->goods)->select();
-    }
-
-    public function getAttrs()
-    {
-        $sku_attrs = $this->getSku()->column('sku_attrs');
-        $children = $this->getUnique($sku_attrs);
-        $parent = $this->getParentAttr($children);
-        $ids = array_merge($children, $parent);
-        $attrs = $this->sku_a->whereIn('id', $ids)->field('id, name, pid')->order('pid asc')->select()->toArray();
-
-        $tree = $this->formatTree($attrs);
-        return $tree;
+        return $this->sku_g->sku($this->goods);
     }
 
     public function formatTree($data, $pid = 0)
@@ -164,7 +163,7 @@ class Sku
 
                 $children = $this->formatTree($data, $item['id']);
 
-                if (!empty($children)){
+                if (!empty($children)) {
                     $temp['v'] = $children;
                 }
 
@@ -175,30 +174,30 @@ class Sku
         return $tree;
     }
 
-    private function getUnique($arrs)
+    public function getAttrValue()
     {
-        $arr_unique = [];
-
-        foreach ($arrs as $arr) {
-            $arr_unique = array_merge($arr, $arr_unique);
-        }
-
-
-        return array_unique($arr_unique);
-    }
-
-    public function getParentAttr($attrs)
-    {
-        $pids = $this->sku_a->whereIn('id', $attrs)->column('pid');
-
-        return array_unique($pids);
+        return $this->sku_g->attrs($this->goods);
     }
 
     // 所有sku规格类目与其值的从属关系，比如商品有颜色和尺码两大类规格，颜色下面又有红色和蓝色两个规格值。
     // 可以理解为一个商品可以有多个规格类目，一个规格类目下可以有多个规格值。
     public function tree()
     {
-        $tree = $this->getAttrs();
+        $attrs = $this->getAttrValue();
+
+        $ids = [];
+        foreach ($attrs as $attr) {
+            $item = explode(',', $attr);
+            foreach ($item as $v) {
+                $ids = array_merge($ids, explode(':', $v));
+            }
+        }
+
+        $ids = array_unique($ids);
+        $attrs = $this->sku_a->getData($ids);
+
+        $tree = $this->formatTree($attrs);
+
         return $tree;
     }
 
@@ -210,19 +209,18 @@ class Sku
 
         foreach ($skus as $sku) {
             $temp = [
-                "id" => $sku->id,
-                "price" => $sku->price,
-                "stock_num" => $sku->stock_num,
+                "id" => $sku['id'],
+                "price" => $sku['price'],
+                "stock_num" => $sku['stock_num'],
             ];
 
-            $sku_as = $this->sku_a->alias('a')->join([
-                '(select * from sku_attr)' => 'b'
-            ], 'a.pid = b.id')->whereIn('a.id', $sku->sku_attrs)->field('a.*, b.name as parent_name, b.id  as parent_id')->select();
+            $attrs = explode(',', $sku['sku_attrs']);
 
-            foreach ($sku_as as $sku_a) {
-                $temp["s{$sku_a->parent_id}"] = $sku_a->id;
+            foreach ($attrs as $attr) {
+                list($parent_id, $children_id) = explode(':', $attr);
+                $temp["s{$parent_id}"] = $children_id;
+
             }
-
             $list[] = $temp;
         }
 
